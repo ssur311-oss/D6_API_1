@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>포켓몬 도감</title>
+<script>
+  // ===== API 주소는 여기 한 곳에만! (번호 = 부르는 순서) =====
+  const API = {
+    // 🔌 ① PokeAPI 포켓몬 기본 정보 (키 없음) — 끝에 영어 이름(pikachu)이나 번호(25)가 붙어요
+    pokemon: "https://pokeapi.co/api/v2/pokemon/",
+    // 🔌 ② PokeAPI 포켓몬 종 정보 (키 없음) — 끝에 ①에서 받은 번호(id)가 붙어요. 한국어 이름·분류·도감 설명
+    species: "https://pokeapi.co/api/v2/pokemon-species/",
+  };
+</script>
+<style>
+  :root {
+    --bg: #fdf3f2;
+    --card: #ffffff;
+    --text: #26211f;
+    --muted: #6e6460;
+    --accent: #d93a35;
+    --error-bg: #fff1f0;
+    --error-text: #b42318;
+    --line: #eedfdc;
+    --bar: #f2b632;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 24px 16px;
+    font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  main { max-width: 560px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 16px; }
+  form { display: flex; gap: 8px; }
+  form input {
+    flex: 1;
+    min-width: 0;
+    font-size: 17px;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+  form button, .nav button {
+    font-size: 16px;
+    padding: 10px 16px;
+    border: 0;
+    border-radius: 10px;
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+  }
+  .hint { color: var(--muted); font-size: 13px; margin: 8px 0 16px; }
+  .card {
+    background: var(--card);
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+    margin-bottom: 12px;
+  }
+  .top { display: flex; gap: 16px; align-items: center; }
+  .top img { width: 160px; height: 160px; object-fit: contain; background: #faf6f5; border-radius: 12px; flex-shrink: 0; }
+  .no { color: var(--muted); font-size: 14px; }
+  .name { font-size: 26px; font-weight: 800; margin: 2px 0; }
+  .en { color: var(--muted); font-size: 14px; }
+  .types { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .type { color: #fff; font-size: 13px; padding: 3px 10px; border-radius: 999px; }
+  .size { color: var(--muted); font-size: 14px; margin-top: 8px; }
+  .card h2 { font-size: 15px; color: var(--muted); margin: 0 0 12px; font-weight: 600; }
+  .stat { display: grid; grid-template-columns: 72px 36px 1fr; gap: 8px; align-items: center; font-size: 14px; margin: 6px 0; }
+  .stat .barbox { background: #f4eeec; border-radius: 999px; height: 10px; overflow: hidden; }
+  .stat .bar { background: var(--bar); height: 100%; }
+  .stat b { text-align: right; }
+  .genus { font-weight: 700; margin-bottom: 6px; }
+  .flavor { line-height: 1.7; }
+  .nav { display: flex; justify-content: space-between; margin-bottom: 12px; }
+  .nav button { background: #fff; color: var(--accent); border: 1px solid var(--accent); font-size: 14px; padding: 8px 14px; }
+  .nav button:disabled { opacity: 0.35; cursor: default; }
+  .loading, .empty { color: var(--muted); padding: 12px 0; }
+  .error {
+    background: var(--error-bg);
+    color: var(--error-text);
+    border-radius: 12px;
+    padding: 16px;
+    line-height: 1.6;
+  }
+  .error button {
+    margin-top: 8px;
+    padding: 6px 14px;
+    border: 1px solid var(--error-text);
+    background: #fff;
+    color: var(--error-text);
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .source { color: var(--muted); font-size: 13px; text-align: center; margin: 16px 0; line-height: 1.6; }
+  .source a { color: var(--accent); }
+  .api-box {
+    margin-top: 24px;
+    background: #faf6f5;
+    border: 1px dashed var(--line);
+    border-radius: 12px;
+    padding: 16px;
+    font-size: 13px;
+  }
+  .api-box h2 { font-size: 15px; margin: 0 0 8px; }
+  .api-box .step { margin-top: 12px; }
+  .api-box code {
+    display: block;
+    word-break: break-all;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px;
+    margin: 6px 0;
+  }
+  .api-box a { color: var(--accent); }
+  @media (max-width: 420px) {
+    .top { flex-direction: column; text-align: center; }
+    .types { justify-content: center; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>📕 포켓몬 도감</h1>
+
+  <form id="search-form">
+    <input id="query" type="text" value="pikachu" placeholder="영어 이름 또는 번호 (예: pikachu, 25)" aria-label="포켓몬 영어 이름 또는 번호">
+    <button type="submit">찾기</button>
+  </form>
+  <p class="hint">💡 한국어 이름(피카츄)으로는 못 찾아요. <b>영어 이름</b>(pikachu)이나 <b>도감 번호</b>(25)로 찾아 주세요.</p>
+
+  <div class="nav">
+    <button type="button" id="prev" disabled>◀ 이전 번호</button>
+    <button type="button" id="next" disabled>다음 번호 ▶</button>
+  </div>
+
+  <section class="card" id="pokemon-card">
+    <div class="empty">포켓몬을 찾아 보세요.</div>
+  </section>
+
+  <section class="card">
+    <h2>📊 기본 능력치</h2>
+    <div id="stats-card"><div class="empty">포켓몬을 먼저 찾아야 해요.</div></div>
+  </section>
+
+  <section class="card">
+    <h2>📖 도감 설명</h2>
+    <div id="species-card"><div class="empty">포켓몬을 먼저 찾아야 해요.</div></div>
+  </section>
+
+  <p class="source">
+    Pokémon data by <a href="https://pokeapi.co/" target="_blank" rel="noopener">PokeAPI</a><br>
+    포켓몬 이름과 그림의 권리는 Nintendo · Game Freak · The Pokémon Company에 있어요.
+  </p>
+
+  <section class="api-box">
+    <h2>🔌 이 화면이 쓰는 API</h2>
+    <div class="step">
+      <b>① 포켓몬 기본 정보</b> — 그림, 타입, 키·몸무게, 능력치
+      <code id="url-pokemon">아직 부르지 않았어요</code>
+      <a id="link-pokemon" href="#" target="_blank" rel="noopener" hidden>새 탭에서 원본 JSON 보기 ↗</a>
+    </div>
+    <div class="step">
+      <b>② 포켓몬 종 정보</b> — ①의 번호(id)로 한국어 이름, 분류, 도감 설명
+      <code id="url-species">아직 부르지 않았어요</code>
+      <a id="link-species" href="#" target="_blank" rel="noopener" hidden>새 탭에서 원본 JSON 보기 ↗</a>
+    </div>
+  </section>
+</main>
+
+<script>
+  // 타입(영어) → 한국어 + 색
+  const TYPES = {
+    normal: ["노말", "#9a9a7a"], fire: ["불꽃", "#e8692c"], water: ["물", "#4a8fe0"],
+    electric: ["전기", "#e0b400"], grass: ["풀", "#5aa63c"], ice: ["얼음", "#5cbcc4"],
+    fighting: ["격투", "#b8322c"], poison: ["독", "#9440a0"], ground: ["땅", "#c49a48"],
+    flying: ["비행", "#8a7ee0"], psychic: ["에스퍼", "#e8507c"], bug: ["벌레", "#8a9c1c"],
+    rock: ["바위", "#a8903c"], ghost: ["고스트", "#6a5494"], dragon: ["드래곤", "#6038e8"],
+    dark: ["악", "#6a5446"], steel: ["강철", "#8a8aa8"], fairy: ["페어리", "#d672a8"],
+  };
+
+  // 능력치(영어) → 한국어
+  const STATS = {
+    hp: "HP", attack: "공격", defense: "방어",
+    "special-attack": "특수공격", "special-defense": "특수방어", speed: "스피드",
+  };
+
+  const MAX_ID = 1025; // 마지막 정식 도감 번호 (이전/다음 버튼용)
+
+  function esc(text) {
+    const div = document.createElement("div");
+    div.textContent = String(text);
+    return div.innerHTML;
+  }
+
+  function showApiUrl(name, url) {
+    document.getElementById("url-" + name).textContent = url;
+    const link = document.getElementById("link-" + name);
+    link.href = url;
+    link.hidden = false;
+  }
+
+  function errorHtml(message, retry) {
+    return `
+      <div class="error">
+        😢 ${message}<br>
+        <button type="button" onclick="${retry}">다시 시도</button>
+      </div>
+    `;
+  }
+
+  let searchId = 0;     // 빠르게 여러 번 찾아도 마지막 결과만 보이게
+  let current = null;   // 지금 보고 있는 포켓몬 (①의 응답)
+  let lastQuery = "";
+
+  function setNav(id) {
+    document.getElementById("prev").disabled = !id || id <= 1;
+    document.getElementById("next").disabled = !id || id >= MAX_ID;
+  }
+
+  // ① 포켓몬 기본 정보
+  async function loadPokemon(query) {
+    query = String(query).trim().toLowerCase();
+    const card = document.getElementById("pokemon-card");
+    if (!query) {
+      card.innerHTML = '<div class="empty">영어 이름이나 번호를 넣어 주세요.</div>';
+      return;
+    }
+    lastQuery = query;
+    const myId = ++searchId;
+    const url = API.pokemon + encodeURIComponent(query);
+    showApiUrl("pokemon", url);
+    card.innerHTML = '<div class="loading">포켓몬을 찾는 중이에요… ⏳</div>';
+    document.getElementById("stats-card").innerHTML = '<div class="loading">능력치를 불러오는 중이에요… ⏳</div>';
+    document.getElementById("species-card").innerHTML = '<div class="empty">①을 먼저 불러와야 해요.</div>';
+
+    try {
+      const res = await fetch(url); // 🔌 API 호출
+      if (myId !== searchId) return;
+      if (res.status === 404 || res.status === 400) {
+        current = null;
+        setNav(null);
+        card.innerHTML = `<div class="empty">"${esc(query)}"(이)라는 포켓몬을 찾지 못했어요. 영어 철자나 번호를 확인해 주세요.</div>`;
+        document.getElementById("stats-card").innerHTML = '<div class="empty">포켓몬을 먼저 찾아야 해요.</div>';
+        document.getElementById("species-card").innerHTML = '<div class="empty">포켓몬을 먼저 찾아야 해요.</div>';
+        return;
+      }
+      if (!res.ok) throw new Error(`서버 응답 ${res.status}`);
+      const data = await res.json();
+      if (myId !== searchId) return;
+
+      current = data;
+      setNav(data.id);
+      renderPokemon(data);
+      renderStats(data);
+      loadSpecies(); // ②는 따로 불러서, 실패해도 ①의 내용은 그대로 보이게
+    } catch (err) {
+      if (myId !== searchId) return;
+      current = null;
+      setNav(null);
+      card.innerHTML = errorHtml(
+        `포켓몬 정보를 불러오지 못했어요.<br>인터넷 연결이나 맨 아래 🔌 API 주소가 맞는지 확인해 주세요.<br><small>(${esc(err.message)})</small>`,
+        "loadPokemon(lastQuery)"
+      );
+      document.getElementById("stats-card").innerHTML = '<div class="empty">①을 불러오지 못해서 보여 줄 수 없어요.</div>';
+    }
+  }
+
+  function renderPokemon(data) {
+    const img = data.sprites.other?.["official-artwork"]?.front_default || data.sprites.front_default;
+    const types = data.types.map(({ type }) => {
+      const [ko, color] = TYPES[type.name] || [type.name, "#888"];
+      return `<span class="type" style="background:${color}">${esc(ko)}</span>`;
+    }).join("");
+    // height는 10cm 단위, weight는 100g 단위
+    document.getElementById("pokemon-card").innerHTML = `
+      <div class="top">
+        ${img ? `<img src="${esc(img)}" alt="${esc(data.name)} 그림" onerror="this.alt='그림을 불러오지 못했어요'">` : ""}
+        <div>
+          <div class="no">No. ${String(data.id).padStart(4, "0")}</div>
+          <div class="name" id="ko-name">${esc(data.name)}</div>
+          <div class="en">${esc(data.name)}</div>
+          <div class="types">${types}</div>
+          <div class="size">키 ${(data.height / 10).toFixed(1)}m · 몸무게 ${(data.weight / 10).toFixed(1)}kg</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderStats(data) {
+    const rows = data.stats.map(({ stat, base_stat }) => `
+      <div class="stat">
+        <span>${esc(STATS[stat.name] || stat.name)}</span>
+        <b>${base_stat}</b>
+        <div class="barbox"><div class="bar" style="width:${Math.min(100, (base_stat / 255) * 100)}%"></div></div>
+      </div>
+    `).join("");
+    const total = data.stats.reduce((sum, s) => sum + s.base_stat, 0);
+    document.getElementById("stats-card").innerHTML = rows + `<div class="stat"><span>합계</span><b>${total}</b><span></span></div>`;
+  }
+
+  // ② 종 정보 (한국어 이름, 분류, 도감 설명)
+  async function loadSpecies() {
+    const box = document.getElementById("species-card");
+    const myId = searchId;
+    const url = API.species + current.id;
+    showApiUrl("species", url);
+    box.innerHTML = '<div class="loading">도감 설명을 불러오는 중이에요… ⏳</div>';
+
+    try {
+      const res = await fetch(url); // 🔌 API 호출
+      if (!res.ok) throw new Error(`서버 응답 ${res.status}`);
+      const data = await res.json();
+      if (myId !== searchId) return;
+
+      const ko = (list) => list.filter((x) => x.language.name === "ko");
+      const koName = ko(data.names)[0]?.name;
+      const genus = ko(data.genera)[0]?.genus;
+      const flavors = ko(data.flavor_text_entries);
+      const flavor = flavors[flavors.length - 1]?.flavor_text.replace(/\s+/g, " ");
+
+      if (koName) document.getElementById("ko-name").textContent = koName;
+      box.innerHTML = `
+        ${genus ? `<div class="genus">${esc(genus)}</div>` : ""}
+        <div class="flavor">${flavor ? esc(flavor) : "한국어 도감 설명이 아직 없어요."}</div>
+      `;
+    } catch (err) {
+      if (myId !== searchId) return;
+      box.innerHTML = errorHtml(
+        `도감 설명을 불러오지 못했어요. (위의 그림과 능력치는 그대로예요)<br><small>(${esc(err.message)})</small>`,
+        "loadSpecies()"
+      );
+    }
+  }
+
+  document.getElementById("search-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    loadPokemon(document.getElementById("query").value);
+  });
+  document.getElementById("prev").addEventListener("click", () => {
+    if (current) loadPokemon(current.id - 1);
+  });
+  document.getElementById("next").addEventListener("click", () => {
+    if (current) loadPokemon(current.id + 1);
+  });
+
+  loadPokemon("pikachu");
+</script>
+</body>
+</html>

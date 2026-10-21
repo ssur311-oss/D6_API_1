@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>아침 대시보드</title>
+<script>
+  // ===== API 주소는 여기 한 곳에만! =====
+  const PLACE = "서울 (시청)"; // 카드 1에 보일 동네 이름 (좌표를 바꾸면 이것도 바꿔 주세요)
+  const API = {
+    // 🔌 카드 1-가: Open-Meteo 날씨 예보 (키 없음) — latitude, longitude = 우리 동네 좌표
+    weather: "https://api.open-meteo.com/v1/forecast?latitude=37.5665&longitude=126.9780&current=temperature_2m,weather_code&timezone=Asia%2FSeoul",
+    // 🔌 카드 1-나: Open-Meteo 대기질 (키 없음) — 위와 같은 좌표
+    air: "https://air-quality-api.open-meteo.com/v1/air-quality?latitude=37.5665&longitude=126.9780&current=pm10,pm2_5&timezone=Asia%2FSeoul",
+    // 🔌 카드 2: Frankfurter 환율 (키 없음) — 1달러 기준으로 원(KRW)과 엔(JPY)을 한 번에
+    rate: "https://api.frankfurter.dev/v1/latest?base=USD&symbols=KRW,JPY",
+    // 🔌 카드 3: Nager.Date 한국 다음 공휴일들 (키 없음)
+    holiday: "https://date.nager.at/api/v3/NextPublicHolidays/KR",
+    // 🔌 카드 4: Dog CEO 랜덤 강아지 사진 (키 없음)
+    dog: "https://dog.ceo/api/breeds/image/random",
+  };
+</script>
+<style>
+  :root {
+    --bg: #fbf6ee;
+    --card: #ffffff;
+    --text: #2a2620;
+    --muted: #6f675c;
+    --accent: #d9692b;
+    --error-bg: #fff1f0;
+    --error-text: #b42318;
+    --line: #ece3d6;
+    --good: #1d6fd6;
+    --normal: #1a8a4a;
+    --bad: #d97706;
+    --very-bad: #c62828;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 24px 16px;
+    font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  main { max-width: 760px; margin: 0 auto; }
+  .greeting { margin-bottom: 20px; }
+  .greeting h1 { font-size: 26px; margin: 0; }
+  .greeting p { color: var(--muted); margin: 6px 0 0; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+  .card {
+    background: var(--card);
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  }
+  .card h2 { font-size: 15px; color: var(--muted); margin: 0 0 12px; font-weight: 600; }
+  .row { display: flex; align-items: center; gap: 12px; }
+  .big { font-size: 34px; font-weight: 700; }
+  .emoji { font-size: 34px; }
+  .sub { color: var(--muted); font-size: 13px; margin-top: 10px; line-height: 1.5; }
+  .dust { display: flex; gap: 10px; margin-top: 12px; }
+  .dust > div { flex: 1; background: #faf7f2; border-radius: 10px; padding: 8px; text-align: center; font-size: 13px; }
+  .dust b { display: block; font-size: 16px; margin: 2px 0; }
+  .good { color: var(--good); }
+  .normal { color: var(--normal); }
+  .bad { color: var(--bad); }
+  .very-bad { color: var(--very-bad); }
+  .rate-line { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 17px; }
+  .rate-line:last-of-type { border-bottom: 0; }
+  .rate-line b { font-size: 20px; }
+  .dday { font-size: 40px; font-weight: 800; color: var(--accent); }
+  .dog img { width: 100%; height: 240px; object-fit: cover; border-radius: 12px; background: #f1ece4; display: block; }
+  .btn {
+    margin-top: 10px;
+    padding: 8px 14px;
+    border: 1px solid var(--accent);
+    background: #fff;
+    color: var(--accent);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .loading { color: var(--muted); padding: 16px 0; }
+  .error {
+    background: var(--error-bg);
+    color: var(--error-text);
+    border-radius: 12px;
+    padding: 14px;
+    line-height: 1.6;
+    font-size: 14px;
+  }
+  .error button {
+    margin-top: 6px;
+    padding: 4px 12px;
+    border: 1px solid var(--error-text);
+    background: #fff;
+    color: var(--error-text);
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .source { color: var(--muted); font-size: 13px; text-align: center; margin: 20px 0; line-height: 1.7; }
+  .source a { color: var(--accent); }
+  .api-box {
+    margin-top: 24px;
+    background: #faf7f2;
+    border: 1px dashed var(--line);
+    border-radius: 12px;
+    padding: 16px;
+    font-size: 13px;
+  }
+  .api-box h2 { font-size: 15px; margin: 0 0 4px; }
+  .api-box .step { margin-top: 12px; }
+  .api-box code {
+    display: block;
+    word-break: break-all;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px;
+    margin: 6px 0;
+  }
+  .api-box a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <header class="greeting">
+    <h1 id="greeting-title"></h1>
+    <p id="greeting-sub"></p>
+  </header>
+
+  <div class="grid">
+    <section class="card">
+      <h2>🌤️ 우리 동네 날씨 · 미세먼지</h2>
+      <div id="weather"><div class="loading">날씨를 불러오는 중이에요… ⏳</div></div>
+      <div id="air"><div class="loading">미세먼지를 불러오는 중이에요… ⏳</div></div>
+    </section>
+
+    <section class="card">
+      <h2>💱 오늘의 환율</h2>
+      <div id="rate"><div class="loading">환율을 불러오는 중이에요… ⏳</div></div>
+    </section>
+
+    <section class="card">
+      <h2>📅 다음 공휴일까지</h2>
+      <div id="holiday"><div class="loading">공휴일을 불러오는 중이에요… ⏳</div></div>
+    </section>
+
+    <section class="card dog">
+      <h2>🐶 오늘의 강아지</h2>
+      <div id="dog"><div class="loading">강아지를 불러오는 중이에요… ⏳</div></div>
+    </section>
+  </div>
+
+  <p class="source">
+    Weather data by <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a> ·
+    환율: <a href="https://frankfurter.dev/" target="_blank" rel="noopener">Frankfurter</a> (유럽중앙은행 기준 환율) ·
+    공휴일: <a href="https://date.nager.at/" target="_blank" rel="noopener">Nager.Date</a> ·
+    강아지 사진: <a href="https://dog.ceo/dog-api/" target="_blank" rel="noopener">Dog CEO</a>
+  </p>
+
+  <section class="api-box">
+    <h2>🔌 이 화면이 쓰는 API</h2>
+    <div>카드마다 따로 불러요. 하나가 실패해도 나머지 카드는 보여요.</div>
+    <div id="api-list"></div>
+  </section>
+</main>
+
+<script>
+  // ---------- 맨 위 인사말 (내 컴퓨터 시계 기준) ----------
+  function showGreeting() {
+    const hour = new Date().getHours();
+    let title, sub;
+    if (hour >= 5 && hour < 11) {
+      title = "☀️ 좋은 아침이에요!";
+      sub = "오늘 하루를 준비해 볼까요?";
+    } else if (hour >= 11 && hour < 17) {
+      title = "🍱 점심 맛있게 드세요!";
+      sub = "오후도 힘내요.";
+    } else if (hour >= 17 && hour < 22) {
+      title = "🌆 좋은 저녁이에요!";
+      sub = "오늘 하루도 수고했어요.";
+    } else {
+      title = "🌙 늦은 밤이에요.";
+      sub = "푹 쉬고 내일 만나요.";
+    }
+    document.getElementById("greeting-title").textContent = title;
+    document.getElementById("greeting-sub").textContent = sub;
+  }
+
+  // ---------- 공통 도우미 ----------
+  const API_LABELS = {
+    weather: "카드 1-가 · 날씨 (Open-Meteo)",
+    air: "카드 1-나 · 미세먼지 (Open-Meteo 대기질)",
+    rate: "카드 2 · 환율 (Frankfurter)",
+    holiday: "카드 3 · 공휴일 (Nager.Date)",
+    dog: "카드 4 · 강아지 (Dog CEO)",
+  };
+
+  // 맨 아래 API 상자: 실제로 부르는 주소 + 원본 JSON 링크
+  function showApiBox() {
+    const list = document.getElementById("api-list");
+    Object.entries(API).forEach(([name, url]) => {
+      const step = document.createElement("div");
+      step.className = "step";
+      const label = document.createElement("b");
+      label.textContent = API_LABELS[name];
+      const code = document.createElement("code");
+      code.textContent = url;
+      const link = document.createElement("a");
+      link.href = url;
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.textContent = "새 탭에서 원본 JSON 보기 ↗";
+      step.append(label, code, link);
+      list.appendChild(step);
+    });
+  }
+
+  function esc(text) {
+    const div = document.createElement("div");
+    div.textContent = String(text);
+    return div.innerHTML;
+  }
+
+  // API 하나를 불러서 JSON으로 돌려줌 (실패하면 에러를 던짐)
+  async function getJson(url) {
+    const res = await fetch(url); // 🔌 API 호출
+    if (!res.ok) throw new Error(`서버 응답 ${res.status}`);
+    return res.json();
+  }
+
+  // 카드 하나를 불러오기: 로딩 중 → 성공하면 render, 실패하면 안내 + 다시 시도
+  async function loadCard(boxId, apiName, what, render) {
+    const box = document.getElementById(boxId);
+    box.innerHTML = `<div class="loading">${what}을(를) 불러오는 중이에요… ⏳</div>`;
+    try {
+      const data = await getJson(API[apiName]);
+      box.innerHTML = render(data);
+    } catch (err) {
+      box.innerHTML = `
+        <div class="error">
+          😢 ${what}을(를) 불러오지 못했어요.<br>
+          인터넷 연결이나 맨 아래 🔌 API 주소가 맞는지 확인해 주세요.<br>
+          <small>(${esc(err.message)})</small><br>
+          <button type="button">다시 시도</button>
+        </div>
+      `;
+      box.querySelector("button").onclick = () => loadCard(boxId, apiName, what, render);
+    }
+  }
+
+  // ---------- 카드 1: 날씨 + 미세먼지 ----------
+  const WEATHER_CODES = {
+    0: ["맑음", "☀️"], 1: ["대체로 맑음", "🌤️"], 2: ["구름 조금", "⛅"], 3: ["흐림", "☁️"],
+    45: ["안개", "🌫️"], 48: ["서리 안개", "🌫️"],
+    51: ["약한 이슬비", "🌦️"], 53: ["이슬비", "🌦️"], 55: ["강한 이슬비", "🌧️"],
+    56: ["약한 어는 이슬비", "🌧️"], 57: ["어는 이슬비", "🌧️"],
+    61: ["약한 비", "🌦️"], 63: ["비", "🌧️"], 65: ["강한 비", "🌧️"],
+    66: ["약한 어는 비", "🌧️"], 67: ["어는 비", "🌧️"],
+    71: ["약한 눈", "🌨️"], 73: ["눈", "🌨️"], 75: ["강한 눈", "❄️"], 77: ["싸락눈", "🌨️"],
+    80: ["약한 소나기", "🌦️"], 81: ["소나기", "🌧️"], 82: ["강한 소나기", "⛈️"],
+    85: ["약한 눈 소나기", "🌨️"], 86: ["강한 눈 소나기", "❄️"],
+    95: ["뇌우", "⛈️"], 96: ["우박 동반 뇌우", "⛈️"], 99: ["강한 우박 동반 뇌우", "⛈️"],
+  };
+
+  // 한국 환경부 미세먼지 예보 등급 (단위 ㎍/㎥, 이하 기준)
+  const DUST_GRADES = {
+    pm10: [[30, "좋음", "good"], [80, "보통", "normal"], [150, "나쁨", "bad"], [Infinity, "매우 나쁨", "very-bad"]],
+    pm2_5: [[15, "좋음", "good"], [35, "보통", "normal"], [75, "나쁨", "bad"], [Infinity, "매우 나쁨", "very-bad"]],
+  };
+
+  function renderWeather(data) {
+    const [text, emoji] = WEATHER_CODES[data.current.weather_code] || [`알 수 없음 (코드 ${data.current.weather_code})`, "❔"];
+    return `
+      <div class="row">
+        <span class="emoji">${emoji}</span>
+        <span class="big">${data.current.temperature_2m}${data.current_units.temperature_2m}</span>
+        <span>${text}</span>
+      </div>
+      <div class="sub">📍 ${PLACE} · 기준 시각 ${data.current.time.replace("T", " ")} (15분 간격 갱신 값)</div>
+    `;
+  }
+
+  function renderAir(data) {
+    const items = [["pm10", "미세먼지"], ["pm2_5", "초미세먼지"]].map(([key, label]) => {
+      const value = data.current[key];
+      if (value == null) return `<div>${label}<b>정보 없음</b></div>`;
+      const [, grade, cls] = DUST_GRADES[key].find(([max]) => Math.round(value) <= max);
+      return `<div>${label}<b class="${cls}">${grade}</b>${value} ㎍/㎥</div>`;
+    });
+    return `
+      <div class="dust">${items.join("")}</div>
+      <div class="sub">미세먼지 기준 시각 ${data.current.time.replace("T", " ")} · 한국 환경부 등급 · 모델 값이라 측정소 값과 다를 수 있어요</div>
+    `;
+  }
+
+  // ---------- 카드 2: 환율 ----------
+  function renderRate(data) {
+    const usd = data.rates.KRW;                         // 1달러 = ?원
+    const jpy100 = (data.rates.KRW / data.rates.JPY) * 100; // 100엔 = ?원 (1달러 기준 값끼리 나눠서 계산)
+    const won = (n) => Math.round(n).toLocaleString("ko-KR");
+    return `
+      <div class="rate-line"><span>🇺🇸 1달러</span><b>${won(usd)}원</b></div>
+      <div class="rate-line"><span>🇯🇵 100엔</span><b>${won(jpy100)}원</b></div>
+      <div class="sub">📅 기준 날짜: ${data.date}<br>유럽중앙은행이 영업일마다 하루 한 번 발표하는 기준 환율이에요.</div>
+    `;
+  }
+
+  // ---------- 카드 3: 다음 공휴일 D-day ----------
+  function renderHoliday(data) {
+    if (!data.length) return '<div class="sub">다가오는 공휴일 정보가 없어요.</div>';
+    const next = data[0];
+    const [y, m, d] = next.date.split("-").map(Number);
+    const today = new Date();
+    const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const days = Math.round((new Date(y, m - 1, d) - todayMidnight) / 86400000);
+    const ddayText = days === 0 ? "D-DAY 🎉" : `D-${days}`;
+    const weekday = ["일", "월", "화", "수", "목", "금", "토"][new Date(y, m - 1, d).getDay()];
+    return `
+      <div class="dday">${ddayText}</div>
+      <div><b>${esc(next.localName || next.name)}</b> · ${y}년 ${m}월 ${d}일 (${weekday})</div>
+      <div class="sub">그다음: ${data.slice(1, 3).map((h) => `${esc(h.localName || h.name)} (${h.date})`).join(", ") || "없음"}</div>
+    `;
+  }
+
+  // ---------- 카드 4: 랜덤 강아지 ----------
+  function renderDog(data) {
+    // 사진 주소 .../breeds/견종이름/파일.jpg 에서 견종 이름 꺼내기
+    const breed = (data.message.split("/breeds/")[1] || "").split("/")[0] || "알 수 없음";
+    return `
+      <img src="${esc(data.message)}" alt="랜덤 강아지 사진 (${esc(breed)})"
+           onerror="this.replaceWith(Object.assign(document.createElement('div'), {className: 'error', textContent: '😢 사진 파일을 열지 못했어요. 새 강아지를 불러 보세요.'}))">
+      <div class="sub">견종: ${esc(breed)}</div>
+      <button type="button" class="btn" onclick="loadDog()">🔄 다른 강아지 보기</button>
+    `;
+  }
+
+  function loadDog() {
+    loadCard("dog", "dog", "강아지 사진", renderDog);
+  }
+
+  // ---------- 시작: 카드마다 따로 부르기 ----------
+  showGreeting();
+  showApiBox();
+  loadCard("weather", "weather", "날씨", renderWeather);
+  loadCard("air", "air", "미세먼지", renderAir);
+  loadCard("rate", "rate", "환율", renderRate);
+  loadCard("holiday", "holiday", "공휴일", renderHoliday);
+  loadDog();
+</script>
+</body>
+</html>
